@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>単語帳管理画面</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 16px;
+      background: #f5f5f5;
+    }
+    h1, h2 {
+      text-align: center;
+    }
+    #container {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    #login-box, #add-form, #search-box {
+      background: #ffffff;
+      padding: 12px;
+      border-radius: 12px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+      margin-bottom: 12px;
+    }
+    #login-box input, #add-form input, #search-input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 6px 8px;
+      margin-bottom: 4px;
+      font-size: 14px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+    }
+    #login-box button, #add-form button {
+      padding: 6px 12px;
+      border-radius: 999px;
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+      margin-right: 4px;
+    }
+    #btn-login { background: #d7ffd7; }
+    #btn-logout { background: #ffdddd; }
+    #login-message {
+      font-size: 12px;
+      color: #666;
+      margin-top: 4px;
+    }
+    #search-box label {
+      font-size: 13px;
+      display: block;
+      margin-bottom: 4px;
+    }
+    #message {
+      font-size: 12px;
+      color: #666;
+      margin-top: 4px;
+      text-align: center;
+    }
+    #loading {
+      font-size: 13px;
+      color: #666;
+      text-align: center;
+      margin: 8px 0;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #ffffff;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+    thead {
+      background: #f0f0f0;
+    }
+    th, td {
+      padding: 8px;
+      font-size: 14px;
+      border-bottom: 1px solid #eee;
+    }
+    th {
+      text-align: left;
+    }
+    tr:last-child td {
+      border-bottom: none;
+    }
+    .actions button {
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: none;
+      cursor: pointer;
+      font-size: 12px;
+      margin-right: 4px;
+    }
+    .btn-edit {
+      background: #e0f0ff;
+    }
+    .btn-delete {
+      background: #ffdddd;
+    }
+    .small-note {
+      font-size: 11px;
+      color: #888;
+      margin-top: 4px;
+      text-align: right;
+    }
+  </style>
+</head>
+<body>
+  <div id="container">
+    <h1>単語帳 管理画面</h1>
+
+    <!-- ログインエリア -->
+    <h2>管理者ログイン</h2>
+    <div id="login-box">
+      <input id="login-email" type="email" placeholder="メールアドレス">
+      <input id="login-password" type="password" placeholder="パスワード">
+      <button id="btn-login">ログイン</button>
+      <button id="btn-logout" style="display:none;">ログアウト</button>
+      <div id="login-message"></div>
+      <div class="small-note">
+        ※ ログインしているユーザーだけが「編集・削除・追加」できます。
+      </div>
+    </div>
+
+    <!-- 検索エリア -->
+    <div id="search-box">
+      <label for="search-input">単語検索（表・裏どちらにも部分一致）</label>
+      <input id="search-input" type="text" placeholder="例: apple / りんご / run など">
+    </div>
+
+    <!-- 単語一覧 -->
+    <div id="loading">読み込み中...</div>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:40px;">#</th>
+          <th style="width:30%;">表</th>
+          <th>裏</th>
+          <th style="width:140px;">操作</th>
+        </tr>
+      </thead>
+      <tbody id="word-table-body">
+        <!-- JSで行を追加 -->
+      </tbody>
+    </table>
+    <div class="small-note">
+      ※ ここで編集した内容は、単語帳アプリ本体（index.html）にも反映されます。
+    </div>
+
+    <!-- 単語追加フォーム -->
+    <h2>単語を追加する</h2>
+    <div id="add-form">
+      <input id="input-front" type="text" placeholder="表（例: apple）">
+      <input id="input-back" type="text" placeholder="裏（例: りんご）">
+      <button id="btn-add">この単語を追加</button>
+      <div class="small-note">
+        ※ ログイン中のみ追加できます。
+      </div>
+    </div>
+
+    <div id="message"></div>
+  </div>
+
+  <!-- Firebase (compat 版) のCDN -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+
+  <script>
+    // ▼ ここは index.html と同じ firebaseConfig に書き換えてください
+    // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+    const firebaseConfig = {
+      apiKey: "AIzaSyCOuuKZgLFJn4Mh4jhcrZW2TWnutCeculU",
+      authDomain: "workbook-shared.firebaseapp.com",
+      projectId: "workbook-shared",
+      storageBucket: "workbook-shared.firebasestorage.app",
+      messagingSenderId: "1085640006832",
+      appId: "1:1085640006832:web:f4281d6bbc1830f8e66f75",
+      measurementId: "G-MCPQTQJ584"
+    };
+
+    // Firebase 初期化
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+    const auth = firebase.auth();
+
+    const docRef = db.collection("wordbooks").doc("default");
+
+    let cards = [];
+    let filterText = "";
+
+    const tbody = document.getElementById("word-table-body");
+    const searchInput = document.getElementById("search-input");
+    const loadingEl = document.getElementById("loading");
+    const messageEl = document.getElementById("message");
+
+    // ログイン用
+    const loginEmail = document.getElementById("login-email");
+    const loginPassword = document.getElementById("login-password");
+    const btnLogin = document.getElementById("btn-login");
+    const btnLogout = document.getElementById("btn-logout");
+    const loginMessage = document.getElementById("login-message");
+
+    // 追加用
+    const inputFront = document.getElementById("input-front");
+    const inputBack = document.getElementById("input-back");
+    const btnAdd = document.getElementById("btn-add");
+
+    function showMessage(text) {
+      messageEl.textContent = text || "";
+      if (!text) return;
+      setTimeout(() => {
+        if (messageEl.textContent === text) {
+          messageEl.textContent = "";
+        }
+      }, 2500);
+    }
+
+    function renderTable() {
+      tbody.innerHTML = "";
+      const ft = filterText.toLowerCase();
+
+      cards.forEach((card, index) => {
+        const f = (card.front || "").toLowerCase();
+        const b = (card.back || "").toLowerCase();
+        if (ft && !f.includes(ft) && !b.includes(ft)) {
+          return; // フィルタにヒットしない行は表示しない
+        }
+
+        const tr = document.createElement("tr");
+
+        const tdIndex = document.createElement("td");
+        tdIndex.textContent = index + 1;
+
+        const tdFront = document.createElement("td");
+        tdFront.textContent = card.front;
+
+        const tdBack = document.createElement("td");
+        tdBack.textContent = card.back;
+
+        const tdActions = document.createElement("td");
+        tdActions.className = "actions";
+
+        const editBtn = document.createElement("button");
+        editBtn.textContent = "編集";
+        editBtn.className = "btn-edit";
+
+        const deleteBtn = document.createElement("button");
+        deleteBtn.textContent = "削除";
+        deleteBtn.className = "btn-delete";
+
+        tdActions.appendChild(editBtn);
+        tdActions.appendChild(deleteBtn);
+
+        tr.appendChild(tdIndex);
+        tr.appendChild(tdFront);
+        tr.appendChild(tdBack);
+        tr.appendChild(tdActions);
+
+        // 編集ボタン
+        editBtn.addEventListener("click", async () => {
+          if (!auth.currentUser) {
+            showMessage("編集するにはログインしてください。");
+            return;
+          }
+          const newFront = prompt("表を編集", card.front);
+          if (newFront === null) return;
+          const newBack = prompt("裏を編集", card.back);
+          if (newBack === null) return;
+
+          const nf = newFront.trim();
+          const nb = newBack.trim();
+          if (!nf || !nb) {
+            showMessage("表と裏の両方を入力してください。");
+            return;
+          }
+
+          try {
+            loadingEl.textContent = "保存中...";
+            cards[index] = { front: nf, back: nb };
+            await docRef.set({ cards }, { merge: false });
+            renderTable();
+            showMessage("更新しました。");
+          } catch (e) {
+            console.error(e);
+            showMessage("更新に失敗しました。");
+          } finally {
+            loadingEl.textContent = "";
+          }
+        });
+
+        // 削除ボタン
+        deleteBtn.addEventListener("click", async () => {
+          if (!auth.currentUser) {
+            showMessage("削除するにはログインしてください。");
+            return;
+          }
+          if (cards.length <= 1) {
+            alert("最後の1件は削除できません。");
+            return;
+          }
+          const ok = confirm(`この単語を削除しますか？\n\n${card.front} - ${card.back}`);
+          if (!ok) return;
+
+          try {
+            loadingEl.textContent = "削除中...";
+            cards.splice(index, 1);
+            await docRef.set({ cards }, { merge: false });
+            renderTable();
+            showMessage("削除しました。");
+          } catch (e) {
+            console.error(e);
+            showMessage("削除に失敗しました。");
+          } finally {
+            loadingEl.textContent = "";
+          }
+        });
+
+        tbody.appendChild(tr);
+      });
+
+      if (!tbody.innerHTML) {
+        const tr = document.createElement("tr");
+        const td = document.createElement("td");
+        td.colSpan = 4;
+        td.textContent = "該当する単語がありません。";
+        tr.appendChild(td);
+        tbody.appendChild(tr);
+      }
+    }
+
+    async function loadCards() {
+      loadingEl.textContent = "読み込み中...";
+      try {
+        const snap = await docRef.get();
+        if (snap.exists) {
+          const data = snap.data();
+          if (Array.isArray(data.cards)) {
+            cards = data.cards;
+          } else {
+            cards = [];
+          }
+        } else {
+          cards = [];
+        }
+      } catch (e) {
+        console.error(e);
+        showMessage("読み込みに失敗しました。");
+        cards = [];
+      } finally {
+        loadingEl.textContent = "";
+        renderTable();
+      }
+    }
+
+    // 検索
+    searchInput.addEventListener("input", () => {
+      filterText = searchInput.value;
+      renderTable();
+    });
+
+    // 追加
+    btnAdd.addEventListener("click", async () => {
+      if (!auth.currentUser) {
+        showMessage("追加するにはログインしてください。");
+        return;
+      }
+      const front = inputFront.value.trim();
+      const back = inputBack.value.trim();
+      if (!front || !back) {
+        showMessage("表と裏の両方を入力してください。");
+        return;
+      }
+
+      try {
+        loadingEl.textContent = "追加中...";
+        cards.push({ front, back });
+        await docRef.set({ cards }, { merge: false });
+        inputFront.value = "";
+        inputBack.value = "";
+        renderTable();
+        showMessage("単語を追加しました。");
+      } catch (e) {
+        console.error(e);
+        showMessage("追加に失敗しました。");
+      } finally {
+        loadingEl.textContent = "";
+      }
+    });
+
+    // ログイン処理
+    btnLogin.addEventListener("click", () => {
+      auth.signInWithEmailAndPassword(loginEmail.value, loginPassword.value)
+        .then(() => {
+          loginMessage.textContent = "ログイン成功！";
+        })
+        .catch(err => {
+          loginMessage.textContent = "ログイン失敗: " + err.message;
+        });
+    });
+
+    // ログアウト処理
+    btnLogout.addEventListener("click", () => {
+      auth.signOut();
+    });
+
+    // ログイン状態変化
+    auth.onAuthStateChanged(user => {
+      if (user) {
+        btnLogin.style.display = "none";
+        btnLogout.style.display = "inline-block";
+        loginMessage.textContent = "ログイン中";
+      } else {
+        btnLogin.style.display = "inline-block";
+        btnLogout.style.display = "none";
+        loginMessage.textContent = "ログアウト中";
+      }
+    });
+
+    // 初回読み込み
+    loadCards();
+  </script>
+</body>
+</html>
