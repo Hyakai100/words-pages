@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+  <!DOCTYPE html>
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
@@ -148,7 +148,16 @@
   <div>
     <button id="btn-reset">初期の単語に戻す</button>
   </div>
-
+  
+  <h2>管理者ログイン</h2>
+  <div id="login-box">
+    <input id="login-email" type="email" placeholder="メールアドレス">
+    <input id="login-password" type="password" placeholder="パスワード">
+    <button id="btn-login">ログイン</button>
+    <button id="btn-logout" style="display:none;">ログアウト</button>
+    <div id="login-message"></div>
+  </div>
+  
   <h2>単語を追加する（全員に共有されます）</h2>
   <div id="add-form">
     <label for="input-front">表（例: apple）</label>
@@ -166,6 +175,7 @@
   <!-- Firebase (compat 版) のCDN -->
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
 
   <script>
     // For Firebase JS SDK v7.20.0 and later, measurementId is optional
@@ -182,6 +192,7 @@
     // ▼ Firebase 初期化
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
+    const auth = firebase.auth();
 
     // ▼ Firestore 上で使う場所
     const docRef = db.collection("wordbooks").doc("default");
@@ -213,17 +224,30 @@
     const btnAdd     = document.getElementById("btn-add");
     const messageEl  = document.getElementById("message");
     const loadingEl  = document.getElementById("loading");
+    const loginEmail = document.getElementById("login-email");
+    const loginPassword = document.getElementById("login-password");
+    const btnLogin = document.getElementById("btn-login");
+    const btnLogout = document.getElementById("btn-logout");
+    const loginMessage = document.getElementById("login-message");
 
     function setUiEnabled(enabled) {
+      // 読み込み中に “移動系” だけ止める
       btnPrev.disabled = !enabled;
       btnNext.disabled = !enabled;
       btnToggle.disabled = !enabled;
-      btnDelete.disabled = !enabled || cards.length <= 1;
-      btnReset.disabled  = !enabled;
-      btnAdd.disabled    = !enabled;
-      inputFront.disabled = !enabled;
-      inputBack.disabled  = !enabled;
+      // 編集ボタン・入力欄はここでは触らない
     }
+
+    function enableEditButtons(enabled) {
+      btnAdd.disabled = !enabled;
+      btnDelete.disabled = !enabled;
+      btnReset.disabled = !enabled;
+
+      // 見た目も少しグレーにする
+      btnAdd.style.opacity = enabled ? 1 : 0.4;
+      btnDelete.style.opacity = enabled ? 1 : 0.4;
+      btnReset.style.opacity = enabled ? 1 : 0.4;
+    }    
 
     function showMessage(text) {
       messageEl.textContent = text || "";
@@ -296,6 +320,43 @@
 
     btnPrev.addEventListener("click", () => move(-1));
     btnNext.addEventListener("click", () => move(1));
+
+    // ログイン処理
+    btnLogin.addEventListener("click", () => {
+      auth.signInWithEmailAndPassword(loginEmail.value, loginPassword.value)
+        .then(() => {
+          loginMessage.textContent = "ログイン成功！";
+        })
+        .catch(err => {
+          loginMessage.textContent = "ログイン失敗: " + err.message;
+        });
+    });
+    
+    // ログアウト処理
+    btnLogout.addEventListener("click", () => {
+      auth.signOut();
+    });
+    
+    // ログイン状態が変わったときに呼ばれる
+    auth.onAuthStateChanged(user => {
+      if (user) {
+        // ログイン時
+        btnLogin.style.display = "none";
+        btnLogout.style.display = "inline-block";
+        loginMessage.textContent = "ログイン中";
+    
+        enableEditButtons(true); // 編集ボタンを有効化
+      } else {
+        // ログアウト時
+        btnLogin.style.display = "inline-block";
+        btnLogout.style.display = "none";
+        loginMessage.textContent = "ログアウト中";
+    
+        enableEditButtons(false); // 編集ボタンを無効化
+      }
+    });
+
+    
     btnToggle.addEventListener("click", () => {
       if (cards.length === 0) return;
       isBackVisible = !isBackVisible;
@@ -308,6 +369,11 @@
     });
 
     btnAdd.addEventListener("click", async () => {
+
+      if (!auth.currentUser) {
+        showMessage("編集するにはログインしてください。");
+        return;
+      }
       const front = inputFront.value.trim();
       const back  = inputBack.value.trim();
       if (!front || !back) {
@@ -384,6 +450,8 @@
 
     // 初回読み込み
     loadCardsFromServer();
+    enableEditButtons(false);
   </script>
 </body>
 </html>
+
