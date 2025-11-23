@@ -148,6 +148,20 @@
   <div>
     <button id="btn-reset">初期の単語に戻す</button>
   </div>
+
+  <div style="margin-top:20px;">
+    <button id="btn-manage" style="
+      padding:10px 20px;
+      border-radius: 999px;
+      border:none;
+      cursor:pointer;
+      background:#d0eaff;
+      font-size:14px;
+    ">
+      管理画面を開く
+    </button>
+  </div>
+
   
   <h2>管理者ログイン</h2>
   <div id="login-box">
@@ -404,6 +418,12 @@
     });
 
     btnDelete.addEventListener("click", async () => {
+      if (!auth.currentUser) {
+        showMessage("編集するにはログインしてください。");
+        return;
+      }
+
+      
       if (cards.length <= 1) {
         alert("最後の1件は削除できません。");
         return;
@@ -451,7 +471,12 @@
     // 初回読み込み
     loadCardsFromServer();
     enableEditButtons(false);
+
+    document.getElementById("btn-manage").addEventListener("click", () => {
+      window.location.href = "https://hyakai100.github.io/words-pages/manage.html";
+    });
   </script>
 </body>
 </html>
+
 
