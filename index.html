@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>単語帳アプリ</title>
+  <title>単語帳アプリ（共有版）</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
   <style>
@@ -11,18 +11,25 @@
       margin: 0;
       padding: 16px;
       text-align: center;
+      background: #f5f5f5;
     }
     h1 {
       font-size: 20px;
-      margin-bottom: 16px;
+      margin-bottom: 8px;
+    }
+    h2 {
+      font-size: 16px;
+      margin-top: 24px;
+      margin-bottom: 8px;
     }
     #card {
-      margin: 0 auto 16px;
+      margin: 12px auto 8px;
       padding: 24px;
-      max-width: 320px;
-      border-radius: 12px;
+      max-width: 340px;
+      border-radius: 16px;
       border: 1px solid #ccc;
       box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+      background: #ffffff;
       cursor: pointer;
       user-select: none;
     }
@@ -34,12 +41,17 @@
     #back {
       font-size: 18px;
       color: #555;
-      display: none; /* 最初は隠しておく */
+      display: none;
     }
     #status {
-      margin-bottom: 8px;
+      margin-bottom: 4px;
       color: #666;
       font-size: 14px;
+    }
+    #hint {
+      margin-bottom: 8px;
+      color: #888;
+      font-size: 12px;
     }
     button {
       margin: 4px;
@@ -48,89 +60,330 @@
       border: none;
       font-size: 14px;
       cursor: pointer;
+      background: #eeeeee;
     }
     button:active {
       transform: scale(0.97);
     }
-    #btn-prev { }
-    #btn-next { }
-    #btn-toggle { }
+    #btn-prev, #btn-next {
+      min-width: 70px;
+    }
+    #btn-toggle {
+      min-width: 140px;
+    }
+    #btn-delete {
+      margin-top: 4px;
+      background: #ffdddd;
+    }
+    #btn-reset {
+      margin-top: 4px;
+      background: #e0f0ff;
+      font-size: 12px;
+    }
+
+    #add-form {
+      margin: 0 auto;
+      max-width: 360px;
+      text-align: left;
+      background: #ffffff;
+      padding: 12px;
+      border-radius: 12px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+    #add-form label {
+      font-size: 13px;
+      display: block;
+      margin-top: 4px;
+      margin-bottom: 2px;
+    }
+    #add-form input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 6px 8px;
+      margin-bottom: 4px;
+      font-size: 14px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+    }
+    #add-form button {
+      width: 100%;
+      margin-top: 6px;
+      background: #d7ffd7;
+    }
+
+    #message {
+      margin-top: 8px;
+      font-size: 12px;
+      color: #888;
+    }
+
+    #loading {
+      font-size: 14px;
+      color: #666;
+      margin-top: 8px;
+    }
   </style>
 </head>
 <body>
 
-  <h1>単語帳アプリ（サンプル）</h1>
+  <h1>単語帳アプリ（共有版）</h1>
   <div id="status"></div>
+  <div id="hint">カードをタップすると、答えの表示 / 非表示が切り替わります。</div>
 
-  <!-- カード本体 -->
   <div id="card">
     <div id="front"></div>
     <div id="back"></div>
   </div>
 
-  <!-- 操作用ボタン -->
   <div>
     <button id="btn-prev">前へ</button>
     <button id="btn-toggle">答えを表示 / 非表示</button>
     <button id="btn-next">次へ</button>
   </div>
 
+  <div>
+    <button id="btn-delete">この単語を削除</button>
+  </div>
+
+  <div>
+    <button id="btn-reset">初期の単語に戻す</button>
+  </div>
+
+  <h2>単語を追加する（全員に共有されます）</h2>
+  <div id="add-form">
+    <label for="input-front">表（例: apple）</label>
+    <input id="input-front" type="text" placeholder="英単語など">
+
+    <label for="input-back">裏（例: りんご）</label>
+    <input id="input-back" type="text" placeholder="意味など">
+
+    <button id="btn-add">この単語を追加</button>
+  </div>
+
+  <div id="loading">読み込み中...</div>
+  <div id="message"></div>
+
+  <!-- Firebase (compat 版) のCDN -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+
   <script>
-    // ▼ 単語データ（あとで自分用に書き換えればOK）
-    const cards = [
-      { front: "apple", back: "りんご" },
+    // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+    const firebaseConfig = {
+      apiKey: "AIzaSyCOuuKZgLFJn4Mh4jhcrZW2TWnutCeculU",
+      authDomain: "workbook-shared.firebaseapp.com",
+      projectId: "workbook-shared",
+      storageBucket: "workbook-shared.firebasestorage.app",
+      messagingSenderId: "1085640006832",
+      appId: "1:1085640006832:web:f4281d6bbc1830f8e66f75",
+      measurementId: "G-MCPQTQJ584"
+    };
+
+    // ▼ Firebase 初期化
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    // ▼ Firestore 上で使う場所
+    const docRef = db.collection("wordbooks").doc("default");
+
+    // ▼ 初期データ
+    const defaultCards = [
+      { front: "apple",  back: "りんご" },
       { front: "banana", back: "バナナ" },
-      { front: "grape", back: "ぶどう" },
+      { front: "grape",  back: "ぶどう" },
       { front: "orange", back: "オレンジ" },
-      { front: "peach", back: "もも" }
+      { front: "peach",  back: "もも" }
     ];
 
+    let cards = [];
     let currentIndex = 0;
     let isBackVisible = false;
 
-    const frontEl = document.getElementById("front");
-    const backEl  = document.getElementById("back");
-    const statusEl = document.getElementById("status");
-    const cardEl = document.getElementById("card");
-    const btnPrev = document.getElementById("btn-prev");
-    const btnNext = document.getElementById("btn-next");
+    const frontEl   = document.getElementById("front");
+    const backEl    = document.getElementById("back");
+    const statusEl  = document.getElementById("status");
+    const cardEl    = document.getElementById("card");
+    const btnPrev   = document.getElementById("btn-prev");
+    const btnNext   = document.getElementById("btn-next");
     const btnToggle = document.getElementById("btn-toggle");
+    const btnDelete = document.getElementById("btn-delete");
+    const btnReset  = document.getElementById("btn-reset");
+    const inputFront = document.getElementById("input-front");
+    const inputBack  = document.getElementById("input-back");
+    const btnAdd     = document.getElementById("btn-add");
+    const messageEl  = document.getElementById("message");
+    const loadingEl  = document.getElementById("loading");
 
-    // カード表示を更新する関数
-    function renderCard() {
-      const card = cards[currentIndex];
-      frontEl.textContent = card.front;
-      backEl.textContent = card.back;
-      statusEl.textContent = `${currentIndex + 1} / ${cards.length}`;
-      // 答えの表示/非表示
-      backEl.style.display = isBackVisible ? "block" : "none";
+    function setUiEnabled(enabled) {
+      btnPrev.disabled = !enabled;
+      btnNext.disabled = !enabled;
+      btnToggle.disabled = !enabled;
+      btnDelete.disabled = !enabled || cards.length <= 1;
+      btnReset.disabled  = !enabled;
+      btnAdd.disabled    = !enabled;
+      inputFront.disabled = !enabled;
+      inputBack.disabled  = !enabled;
     }
 
-    // インデックスを移動する関数
+    function showMessage(text) {
+      messageEl.textContent = text || "";
+      if (!text) return;
+      setTimeout(() => {
+        if (messageEl.textContent === text) {
+          messageEl.textContent = "";
+        }
+      }, 2500);
+    }
+
+    function renderCard() {
+      if (cards.length === 0) {
+        frontEl.textContent = "単語がありません";
+        backEl.textContent = "追加してください";
+        backEl.style.display = "block";
+        statusEl.textContent = "0 / 0";
+        return;
+      }
+      const card = cards[currentIndex];
+      frontEl.textContent = card.front;
+      backEl.textContent  = card.back;
+      statusEl.textContent = `${currentIndex + 1} / ${cards.length}`;
+      backEl.style.display = isBackVisible ? "block" : "none";
+      btnDelete.disabled = (cards.length <= 1);
+    }
+
     function move(delta) {
+      if (cards.length === 0) return;
       currentIndex += delta;
       if (currentIndex < 0) currentIndex = cards.length - 1;
       if (currentIndex >= cards.length) currentIndex = 0;
-      isBackVisible = false; // カード移動時は答えを隠す
+      isBackVisible = false;
       renderCard();
     }
 
-    // イベント設定
+    async function saveCardsToServer() {
+      await docRef.set({ cards }, { merge: false });
+    }
+
+    async function loadCardsFromServer() {
+      loadingEl.textContent = "読み込み中...";
+      setUiEnabled(false);
+      try {
+        const snap = await docRef.get();
+        if (snap.exists) {
+          const data = snap.data();
+          if (Array.isArray(data.cards) && data.cards.length > 0) {
+            cards = data.cards;
+          } else {
+            cards = [...defaultCards];
+            await saveCardsToServer();
+          }
+        } else {
+          cards = [...defaultCards];
+          await saveCardsToServer();
+        }
+      } catch (e) {
+        console.error(e);
+        cards = [...defaultCards];
+        showMessage("読み込みに失敗したので初期データを表示します。");
+      } finally {
+        currentIndex = 0;
+        isBackVisible = false;
+        renderCard();
+        loadingEl.textContent = "";
+        setUiEnabled(true);
+      }
+    }
+
     btnPrev.addEventListener("click", () => move(-1));
     btnNext.addEventListener("click", () => move(1));
     btnToggle.addEventListener("click", () => {
+      if (cards.length === 0) return;
       isBackVisible = !isBackVisible;
       renderCard();
     });
-
-    // カードタップでも答えの表示切替
     cardEl.addEventListener("click", () => {
+      if (cards.length === 0) return;
       isBackVisible = !isBackVisible;
       renderCard();
     });
 
-    // 初期表示
-    renderCard();
+    btnAdd.addEventListener("click", async () => {
+      const front = inputFront.value.trim();
+      const back  = inputBack.value.trim();
+      if (!front || !back) {
+        showMessage("表と裏の両方を入力してください。");
+        return;
+      }
+      setUiEnabled(false);
+      try {
+        cards.push({ front, back });
+        await saveCardsToServer();
+        currentIndex = cards.length - 1;
+        isBackVisible = false;
+        renderCard();
+        inputFront.value = "";
+        inputBack.value  = "";
+        inputFront.focus();
+        showMessage("単語を追加しました。（全体に反映されます）");
+      } catch (e) {
+        console.error(e);
+        showMessage("追加に失敗しました。");
+      } finally {
+        setUiEnabled(true);
+      }
+    });
+
+    inputBack.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") btnAdd.click();
+    });
+
+    btnDelete.addEventListener("click", async () => {
+      if (cards.length <= 1) {
+        alert("最後の1件は削除できません。");
+        return;
+      }
+      const card = cards[currentIndex];
+      const ok = confirm(`この単語を削除しますか？\n\n${card.front} - ${card.back}`);
+      if (!ok) return;
+      setUiEnabled(false);
+      try {
+        cards.splice(currentIndex, 1);
+        if (currentIndex >= cards.length) {
+          currentIndex = cards.length - 1;
+        }
+        isBackVisible = false;
+        await saveCardsToServer();
+        renderCard();
+        showMessage("単語を削除しました。（全体に反映されます）");
+      } catch (e) {
+        console.error(e);
+        showMessage("削除に失敗しました。");
+      } finally {
+        setUiEnabled(true);
+      }
+    });
+
+    btnReset.addEventListener("click", async () => {
+      const ok = confirm("単語リストを初期状態に戻しますか？\n（全員に反映されます）");
+      if (!ok) return;
+      setUiEnabled(false);
+      try {
+        cards = [...defaultCards];
+        currentIndex = 0;
+        isBackVisible = false;
+        await saveCardsToServer();
+        renderCard();
+        showMessage("初期の単語に戻しました。（全体に反映されます）");
+      } catch (e) {
+        console.error(e);
+        showMessage("リセットに失敗しました。");
+      } finally {
+        setUiEnabled(true);
+      }
+    });
+
+    // 初回読み込み
+    loadCardsFromServer();
   </script>
 </body>
 </html>
