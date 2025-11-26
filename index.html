@@ -244,6 +244,16 @@
     const btnLogout = document.getElementById("btn-logout");
     const loginMessage = document.getElementById("login-message");
 
+    // 配列をランダムにシャッフルする関数（Fisher–Yates）
+    function shuffle(array) {
+      const arr = [...array];
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
+    }
+
     function setUiEnabled(enabled) {
       // 読み込み中に “移動系” だけ止める
       btnPrev.disabled = !enabled;
@@ -324,6 +334,9 @@
         cards = [...defaultCards];
         showMessage("読み込みに失敗したので初期データを表示します。");
       } finally {
+
+        cards = shuffle(cards);
+
         currentIndex = 0;
         isBackVisible = false;
         renderCard();
@@ -478,5 +491,6 @@
   </script>
 </body>
 </html>
+
 
 
